@@ -8,13 +8,24 @@
 
 const float pixelSize = 32.0f;
 
+std::deque<std::string> RegexDeque(const std::regex& rgx, const std::string& initString) {
+	std::deque<std::string> text(
+		std::sregex_token_iterator(initString.begin(), initString.end(), rgx, -1),
+		std::sregex_token_iterator()
+	);
+
+	return text;
+}
+
 class TextWindow {
 private:
 	sf::RectangleShape box;
 
 	std::vector<std::string> strings;
+	std::vector<sf::Color> colors;
 	std::ostringstream textString;
-	int textIndex;
+	int textIndex, showTextIndex;
+	uint32_t nShowText;
 	sf::Text text;
 
 	void Input(int character) {
@@ -39,6 +50,9 @@ private:
 					strings.erase(it);
 					textIndex--;
 					textString.str(strings[textIndex]);
+					colors.pop_back();
+
+					if (showTextIndex > 0) showTextIndex--;
 				}
  			}
 		}
@@ -46,30 +60,6 @@ private:
 			textString << static_cast<char>(character);
 		}
 	}
-public:
-	TextWindow() {}
-	TextWindow(const sf::Vector2f& pos, const sf::Vector2f& size) {
-		box.setSize(size);
-		box.setPosition(pos);
-		box.setFillColor(sf::Color(25, 25, 25));
-		text.setCharacterSize(15);
-
-		strings.push_back("");
-		textIndex = 0;
-	}
-
-	void SetFont(const sf::Font& font) {
-		text.setFont(font);
-	}
-
-	void ResetStrings() {
-		textString.str("");
-		strings.clear();
-		strings.push_back("");
-		textIndex = 0;
-	}
-
-	inline std::vector<std::string> GetStrings() const { return strings; }
 
 	void AddNewLine() {
 		auto it = strings.begin();
@@ -80,7 +70,69 @@ public:
 		}
 		strings.insert(it, textString.str());
 		textString.str("");
+		colors.push_back(sf::Color::White);
 		textIndex++;
+
+		if (textIndex > (int)nShowText) {
+			showTextIndex++;
+		}
+	}
+
+	void ChangeActiveString(int dir) {
+		if (dir == 0) {
+			//Direction Up
+
+			strings[textIndex].pop_back();
+
+			textIndex--;
+			if (textIndex < 0) textIndex = 0;
+			
+			if (textIndex < (int)nShowText && showTextIndex > 0) showTextIndex--;
+			textString.str("");
+			textString << strings[textIndex];
+		}
+		else {
+			//Direction Down
+			strings[textIndex].pop_back();
+
+			textIndex++;
+			if (textIndex > (int)(strings.size() - 1)) textIndex = (int)(strings.size() - 1);
+			
+			if (textIndex > (int)nShowText && showTextIndex < (int)(strings.size() - 1)) showTextIndex++;
+			textString.str("");
+			textString << strings[textIndex];
+		}
+	}
+public:
+	TextWindow() {}
+	TextWindow(const sf::Vector2f& pos, const sf::Vector2f& size) {
+		box.setSize(size);
+		box.setPosition(pos);
+		box.setFillColor(sf::Color(25, 25, 25));
+		text.setCharacterSize(15);
+
+		colors.push_back(sf::Color::White);
+		strings.push_back("");
+		textIndex = 0;
+		showTextIndex = 0;
+
+		const sf::Vector2u windowSize = { 512, 512 };
+		nShowText = (uint32_t)(windowSize.y / text.getCharacterSize() - 3);
+	}
+
+	void SetFont(const sf::Font& font) {
+		text.setFont(font);
+	}
+
+	void ResetStrings() {
+		textString.str("");
+		strings.clear();
+		strings.push_back("");
+		colors.clear();
+		colors.push_back(sf::Color::White);
+
+		textIndex = 0;
+		showTextIndex = 0;
 	}
 
 	void ManageEvent(sf::Event e) {
@@ -90,23 +142,16 @@ public:
 				Input(e.text.unicode);
 			}
 			break;
+		case sf::Event::Resized:
+			nShowText = (uint32_t)(e.size.height / text.getCharacterSize() - 3);
+			break;
 		case sf::Event::KeyPressed:
 			switch (e.key.code) {
 			case sf::Keyboard::Up:
-
-				strings[textIndex].pop_back();
-
-				textIndex--;
-				if (textIndex < 0) textIndex = 0;
-				textString.str(strings[textIndex]);
+				ChangeActiveString(0);
 				break;
 			case sf::Keyboard::Down:
-
-				strings[textIndex].pop_back();
-
-				textIndex++;
-				if (textIndex > (int)(strings.size() - 1)) textIndex = (int)(strings.size() - 1);
-				textString.str(strings[textIndex]);
+				ChangeActiveString(1);
 				break;
 			case sf::Keyboard::Return:
 				AddNewLine();
@@ -118,18 +163,63 @@ public:
 		strings[textIndex] = textString.str() + "_";
 	}
 
+	void Logic() {
+		int value = 0;
+
+		for (int i = 0; i < (int)strings.size(); i++) {
+
+			int stringIndex = i + value;
+			if (stringIndex > (int)(strings.size() - 1)) break;
+			
+			std::string initString = strings[stringIndex];
+			if (initString.size() > 1) {
+				while ((initString.back() == '_' || initString.back() == ' ')) initString.pop_back();
+			}
+			
+			auto text = RegexDeque(std::regex("\\s"), initString);
+
+			if (text.size() > 2) text.pop_front();
+
+			if (text[0] == "Move" || text[0] == "move") {
+				colors[i] = (i % 2 == 0) ? sf::Color::Cyan : sf::Color(0, 100, 200);
+			}
+			else if (text[0] == "StartLoop" || text[0] == "startloop") {
+				for (int j = stringIndex; j < (int)strings.size(); j++) {
+
+					initString = strings[j];
+					if (initString.size() > 1) {
+						while ((initString.back() == '_' || initString.back() == ' ')) initString.pop_back();
+					}
+
+					auto loopText = RegexDeque(std::regex("\\s"), initString);
+					if (loopText.size() > 2) loopText.pop_front();
+
+					colors[j] = sf::Color::Yellow;
+
+					if (loopText[0] == "closeloop") {
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	void Render(sf::RenderWindow& window) {
 		window.draw(box);
-		
+
 		float pos = 2.0f;
-		
-		for (auto& str : strings) {
-			text.setString(sf::String("> ") + str);
+
+		for (int i = showTextIndex; i < (int)strings.size(); i++) {
+			text.setFillColor(colors[i]);
+			text.setString(sf::String("> ") + strings[i]);
 			text.setPosition({ 360.0f, pos * (float)text.getCharacterSize() });
 			window.draw(text);
 			pos++;
 		}
 	}
+
+	std::vector<sf::Color>& Colors() { return colors; }
+	inline std::vector<std::string> GetStrings() const { return strings; }
 };
 
 class GameState {
@@ -152,31 +242,36 @@ class Player {
 private:
 	sf::Vector2f playerPos;
 	std::vector<sf::Vector2i> movePositions;
-	int index;
+	int index, nMoves;
 	bool isIndex;
 
-	void IntrepretMovement(const std::deque<std::string>& text, int index) {
-		if (text[index + 1] == "Left" || text[index + 1] == "left" || text[index + 1] == "l") {
+	void IntrepretMovement(const std::deque<std::string>& text, std::vector<sf::Color>& colors, bool isLoop) {
+		if (text[1] == "Left" || text[1] == "left" || text[1] == "l") {
 			AddMovePosition(-1, 0);
+			//if (!isLoop) colors.push_back(sf::Color(rand() % 256, rand() % 256, rand() % 256));
 		}
-		else if (text[index + 1] == "Right" || text[index + 1] == "right" || text[index + 1] == "r") {
+		else if (text[1] == "Right" || text[1] == "right" || text[1] == "r") {
 			AddMovePosition(1, 0);
+			//if (!isLoop) colors.push_back(sf::Color(rand() % 256, rand() % 256, rand() % 256));
 		}
-		else if (text[index + 1] == "Up" || text[index + 1] == "up" || text[index + 1] == "u") {
+		else if (text[1] == "Up" || text[1] == "up" || text[1] == "u") {
 			AddMovePosition(0, -1);
+			//if (!isLoop) colors.push_back(sf::Color(rand() % 256, rand() % 256, rand() % 256));
 		}
-		else if (text[index + 1] == "Down" || text[index + 1] == "down" || text[index + 1] == "d") {
+		else if (text[1] == "Down" || text[1] == "down" || text[1] == "d") {
 			AddMovePosition(0, 1);
+			//if (!isLoop) colors.push_back(sf::Color(rand() % 256, rand() % 256, rand() % 256));
 		}
 	}
 
-	std::size_t IntrepretLoop(const std::vector<std::string>& strings, int nStartPoint, int nLoop) {
+	std::size_t IntrepretLoop(const std::vector<std::string>& strings, std::vector<sf::Color>& colors, int nStartPoint, int nLoop) {
 
 		std::vector<std::string> stringsToLoop;
 		
 		bool isLoopPoint = false;
 
-		std::cout << "TextForLoop" << std::endl;
+		sf::Color randColor = sf::Color((rand() % 100) + 100, (rand() % 100) + 100, (rand() % 100) + 100);
+
 		for (int i = nStartPoint; i < (int)strings.size(); i++) {
 
 			std::string loopString = strings[i];
@@ -185,6 +280,8 @@ private:
 			auto textForLoop = RegexDeque(std::regex("\\s"), loopString);
 			//TextForLoop deque has an empty string as the first element when i > nStartPoint
 			if (i > nStartPoint && textForLoop.size() > 0) textForLoop.pop_front();
+
+			//colors[i] = randColor;
 
 			if (textForLoop.size() > 0) {
 				if (textForLoop[0] == "closeloop") {
@@ -211,28 +308,19 @@ private:
 				if (text.size() > 2) text.pop_front();
 
 				if (text[0] == "Move" || text[0] == "move") {
-					IntrepretMovement(text, 0);
+					IntrepretMovement(text, colors, true);
 				}
 			}
 		}
 
 		return stringsToLoop.size();
 	}
-
-	std::deque<std::string> RegexDeque(const std::regex& rgx, const std::string& initString) {
-		std::deque<std::string> text(
-			std::sregex_token_iterator(initString.begin(), initString.end(), rgx, -1),
-			std::sregex_token_iterator()
-		);
-
-		return text;
-	}
-
 public:
 	Player() {}
 	Player(const sf::Vector2f& pos)
 		: playerPos(pos) {
 		index = 0;
+		nMoves = 0;
 		isIndex = false;
 	}
 
@@ -250,6 +338,7 @@ public:
 			sf::Vector2i playerToLevelIndex = { x + movePositions[index].x, y + movePositions[index].y };
 
 			if (level.GetLevel()[playerToLevelIndex.y][playerToLevelIndex.x] == '#') {
+				nMoves++;
 				playerPos += sf::Vector2f(movePositions[index].x * pixelSize, movePositions[index].y * pixelSize);
 			}
 
@@ -257,11 +346,12 @@ public:
 		}
 	}
 
-	void Run(const std::vector<std::string>& strings) {
+	void Run(const std::vector<std::string>& strings, std::vector<sf::Color>& colors) {
 		ClearMovePositions();
 
 		int value = 0, stringIndex = 0;
 
+		system("cls");
 		for (int i = 0; i < (int)strings.size(); i++) {
 			
 			//StringIndex ensures that looping strings are not re-read
@@ -280,7 +370,7 @@ public:
 			if (text.size() > 2) text.pop_front();
 
 			if (text[0] == "Move" || text[0] == "move") {
-				IntrepretMovement(text, 0);
+				IntrepretMovement(text, colors, false);
 			}
 
 			if (text[0] == "startloop" || text[0] == "StartLoop") {
@@ -290,9 +380,22 @@ public:
 				ss >> n;
 
 				//nLines -> number of lines in loop
-				int nLines = (int)IntrepretLoop(strings, stringIndex, n) + 1;
+				int nLines = (int)IntrepretLoop(strings, colors, stringIndex, n);
 				value += nLines;
 			}
+		}
+	}
+
+	void Logic(Level& itemMap) {
+		auto [x, y] = (sf::Vector2i)(playerPos / pixelSize);
+
+		switch (itemMap.GetLevel()[y][x]) {
+		case '1':
+			itemMap.SetCharacter((unsigned)x, (unsigned)y, '#');
+			break;
+		case '2':
+			std::cout << "Win" << std::endl;
+			break;
 		}
 	}
 
@@ -304,8 +407,11 @@ public:
 		movePositions.clear();
 	}
 
-	inline int GetIndex() const { return index; }
+	void ResetNMoves() { nMoves = 0; }
 	void ResetIndex() { index = 0; }
+
+	inline int GetNMoves() const { return nMoves; }
+	inline int GetIndex() const { return index; }
 	bool& GetIsIndex() { return isIndex; }
 	inline sf::Vector2f GetPosition() const { return playerPos; }
 	std::vector<sf::Vector2i> GetMovePositions() const { return movePositions; }
@@ -313,8 +419,9 @@ public:
 
 class PlayState : public GameState {
 private:
-	Level level;
+	Level level, itemMap;
 	sf::RectangleShape pixel;
+	sf::CircleShape circle;
 
 	Player player;
 	sf::Color playerColor;
@@ -323,10 +430,19 @@ private:
 	Button runButton, clearButton;
 	sf::Text text;
 
-	bool isRun;
+	bool isRun, isGridDrawn;
 
 	sf::Clock clock;
 	int t, delay;
+
+	void DrawGrid(sf::RenderWindow& window, float x, float y) {
+		for (uint32_t i = 0; i < level.GetWidth() - 1; i++) {
+			DrawLine(window, (x + i) * pixelSize, y * pixelSize, (x + i) * pixelSize, (float)(level.GetHeight() - 1) * pixelSize);
+		}
+		for (uint32_t i = 0; i < level.GetHeight() - 1; i++) {
+			DrawLine(window, x * pixelSize, (y + i) * pixelSize, (float)(level.GetWidth() - 1) * pixelSize, (y + i) * pixelSize);
+		}
+	}
 public:
 	PlayState(const sf::Vector2u& size) 
 		: GameState(size) {
@@ -338,11 +454,12 @@ public:
 		playerColor = sf::Color(rand() % 256, rand() % 256, rand() % 256);
 
 		pixel.setSize({ pixelSize, pixelSize });
+		circle.setRadius(10.0f);
 
 		delay = 100; //Milliseconds
 
-		isRun = true;
-		player.Run(textWindow.GetStrings());
+		isRun = false;
+		isGridDrawn = true;
 
 		runButton.Initialize({ 0.0f, size.y - 50.0f }, { 150.0f, 50.0f });
 		runButton.SetColors(sf::Color(90, 100, 200), sf::Color(45, 50, 100), sf::Color(15, 25, 50));
@@ -356,6 +473,7 @@ public:
 		text.setCharacterSize(25);
 
 		level = Level::LoadLevel("files/levels/level0.txt");
+		itemMap = Level::LoadLevel("files/levels/level0ItemMap.txt");
 	}
 
 	void Input() override {}
@@ -363,16 +481,30 @@ public:
 	void ManageEvent(sf::Event e, sf::Vector2f mousePos) override {
 		textWindow.ManageEvent(e);
 
+		switch (e.type) {
+		case sf::Event::KeyPressed:
+			switch (e.key.code) {
+			case sf::Keyboard::LShift:
+				isGridDrawn = !isGridDrawn;
+				break;
+			}
+			break;
+		}
+
 		runButton.Logic(e, mousePos);
 		clearButton.Logic(e, mousePos);
 	}
 
 	void Logic(float dt) override {
+
+		player.Logic(itemMap);
+		textWindow.Logic();
+
 		if (runButton.GetIsPressed()) {
 			isRun = true;
 			player.ResetIndex();
 			
-			player.Run(textWindow.GetStrings());
+			player.Run(textWindow.GetStrings(), textWindow.Colors());
 		}
 
 		if (clearButton.GetIsPressed()) textWindow.ResetStrings();
@@ -395,14 +527,15 @@ public:
 
 		if (t > 2 * delay && player.GetIsIndex()) {
 			player.GetIsIndex() = false;
+			player.ResetNMoves();
 			player.SetPosition({ pixelSize, pixelSize });
 			t = 0;
 		}
 	}
 
 	void Render(sf::RenderWindow& window) override {
-		for (int i = 0; i < (int)level.GetHeight(); i++) {
-			for (int j = 0; j < (int)level.GetWidth(); j++) {
+		for (int i = 1; i < (int)level.GetHeight() - 1; i++) {
+			for (int j = 1; j < (int)level.GetWidth() - 1; j++) {
 				switch (level.GetLevel()[i][j]) {
 				case '#':
 					pixel.setFillColor(sf::Color::Blue);
@@ -416,7 +549,32 @@ public:
 				window.draw(pixel);
 			}
 		}
+
+		for (int i = 1; i < (int)itemMap.GetHeight() - 1; i++) {
+			for (int j = 1; j < (int)itemMap.GetWidth() - 1; j++) {
+				switch (itemMap.GetLevel()[i][j]) {
+				case '#':
+				case '.':
+					continue;
+					break;
+				case '1':
+					circle.setFillColor(sf::Color::Yellow);
+					circle.setPosition(j * pixelSize, i * pixelSize);
+					window.draw(circle);
+					break;
+				case '2':
+					pixel.setFillColor(sf::Color::Green);
+					pixel.setPosition(j * pixelSize, i * pixelSize);
+					window.draw(pixel);
+					break;
+				}
+			}
+		}
 		
+		if (isGridDrawn) {
+			DrawGrid(window, 1, 1);
+		}
+
 		pixel.setPosition(player.GetPosition());
 		pixel.setFillColor(sf::Color::Red);
 		window.draw(pixel);
@@ -428,10 +586,13 @@ public:
 		window.draw(text);
 
 		runButton.Render(window);
+		
 		text.setString("Run");
 		text.setPosition(50.0f, windowSize.y - 40.0f);
 		window.draw(text);
 
+		DrawTextWithValue(window, AssetHolder::Get().GetFont("sansationRegular"), 210.0f, (windowSize.y - 32.0f), "Moves : ", player.GetNMoves(), sf::Color::White, 25);
+		
 		clearButton.Render(window);
 	}
 };
@@ -439,7 +600,8 @@ public:
 class Game {
 private:
 	sf::RenderWindow Window;
-	
+	const sf::String windowTitle;
+
 	std::vector<std::unique_ptr<GameState>> gameStates;
 
 	void LoadAssets() {
@@ -449,8 +611,9 @@ private:
 	sf::Clock clock;
 	float initDt;
 public:
-	Game(uint32_t x, uint32_t y, const sf::String& title) 
-		: Window({ x, y }, title) {
+	Game(uint32_t x, uint32_t y, const sf::String& title)
+		: windowTitle(title),
+		  Window({ x, y }, title) {
 		Window.setFramerateLimit(60);
 	
 		LoadAssets();
@@ -475,6 +638,9 @@ public:
 				switch (e.type) {
 				case sf::Event::Closed:
 					Window.close();
+					break;
+				case sf::Event::Resized:
+					Window.create({ (uint32_t)e.size.width, (uint32_t)e.size.height }, windowTitle);
 					break;
 				}
 			
