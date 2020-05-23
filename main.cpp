@@ -110,8 +110,13 @@ public:
 		box.setFillColor(sf::Color(25, 25, 25));
 		text.setCharacterSize(15);
 
-		colors.push_back(sf::Color::White);
-		strings.push_back("");
+		auto Push = [&](const std::string& str) {
+			colors.push_back(sf::Color::White);
+			strings.push_back(str);
+		};
+
+		Push("");
+
 		textIndex = 0;
 		showTextIndex = 0;
 
@@ -176,26 +181,61 @@ public:
 
 			colors[stringIndex] = sf::Color::White;
 			
-			if (stringText[0] == "move") {
-				colors[stringIndex] = sf::Color::Cyan;
-			}
-			else if (stringText[0] == "openloop" || stringText[0] == "repeat") {
-				for (int j = stringIndex; j < (int)strings.size(); j++) {
+			if (stringText.size() > 1) {
+				if (stringText[0] == "move") {
+					colors[stringIndex] = sf::Color::Cyan;
+					if (i == textIndex) {
+						std::string activeString = textString.str();
 
-					auto loopText = ToWords(strings[j]);
-					if (loopText.size() == 0) continue;
+						while (activeString.size() > (uint32_t)(i == 0 ? 7 : 8)) {
+							activeString.pop_back();
+						}
 
-					colors[j] = sf::Color(255, 100, 0);
-
-					if (loopText[0] == "move") {
-						colors[j] = sf::Color(0, 200, 100);
+						textString.str("");
+						textString << std::move(activeString);
 					}
+				}
+				else if (stringText[0] == "rotate") {
+					colors[stringIndex] = sf::Color::Yellow;
+					if (i == textIndex) {
+						std::string activeString = textString.str();
 
-					if (loopText[0] == "closeloop" || loopText[0] == "end") { //Openloop close
-						colors[j] = sf::Color(255, 150, 0);
-						break;
+						while (activeString.size() > (uint32_t)(i == 0 ? 10 : 11)) {
+							activeString.pop_back();
+						}
+
+						textString.str("");
+						textString << std::move(activeString);
 					}
-					value++;
+				}
+				else if (stringText[0] == "openloop" || stringText[0] == "repeat") {
+					for (int j = stringIndex; j < (int)strings.size(); j++) {
+
+						auto loopText = ToWords(strings[j]);
+						if (loopText.size() == 0) continue;
+
+						colors[j] = sf::Color(255, 100, 0);
+
+						if (loopText[0] == "move") {
+							colors[j] = sf::Color(0, 200, 100);
+						}
+
+						if (loopText[0] == "rotate") {
+							colors[j] = sf::Color::Yellow;
+						}
+
+						if (loopText.size() > 2) {
+							if ((loopText[0] == "if" && loopText[1] == "fd") || loopText[0] == "else" ||
+								(loopText[0] == "closeif" || loopText[1] == "endif")) {
+								colors[j] = sf::Color(100, 255, 255);
+							}
+						}
+
+						if (loopText[0] == "closeloop" || loopText[0] == "end") { //Openloop close
+							break;
+						}
+						value++;
+					}
 				}
 			}
 		}
@@ -216,14 +256,17 @@ public:
 			window.draw(text);
 			
 			if (stringText.size() > 1) {
-				if (stringText[0] == "move" || stringText[0] == "openloop" || stringText[0] == "repeat") {
-					text.setFillColor(stringText[0] == "move" ? sf::Color::Green : sf::Color::Magenta);
+				if (stringText[0] == "move" || stringText[0] == "openloop" || stringText[0] == "repeat" || stringText[0] == "rotate") {
+					if (stringText[0] == "move") text.setFillColor(sf::Color::Green);
+					else if (stringText[0] == "openloop" || stringText[0] == "repeat") text.setFillColor(sf::Color::Magenta);
+					else if (stringText[0] == "rotate") text.setFillColor(sf::Color(200, 100, 0));
 					text.setString(stringText[1]);
 
 					float positionX = stringText[0].size() * text.getCharacterSize() / 2.0f;
 					if (stringText[0] == "move") { positionX += 32.0f; }
-					if (stringText[0] == "openloop") { positionX += 40.0f; }
-					if (stringText[0] == "repeat") { positionX += 35.0f; }
+					else if (stringText[0] == "openloop") { positionX += 40.0f; }
+					else if (stringText[0] == "repeat") { positionX += 35.0f; }
+					else if (stringText[0] == "rotate") { positionX += 35.0f; }
 
 					text.setPosition(360.0f + positionX, pos * (float)text.getCharacterSize());
 					window.draw(text);
@@ -308,30 +351,61 @@ public:
 class Player {
 private:
 	sf::Vector2f resetPlayerPos, playerPos;
+	sf::Sprite sprite;
 	std::vector<sf::Vector2i> movePositions;
-	int index, nMoves;
+	std::vector<int> rotations;
+	int index, nMoves, direction;
 	bool isIndex, isWin; //isIndex -> index == (movePositions.size - 1) & isWin -> has player won a level
-	sf::Color color;
 
-	void IntrepretMovement(const std::vector<std::string>& text) {
-		if (text[1] == "l") {
-			AddMovePosition(-1, 0);
-		}
-		else if (text[1] == "r") {
-			AddMovePosition(1, 0);
-		}
-		else if (text[1] == "u") {
-			AddMovePosition(0, -1);
-		}
-		else if (text[1] == "d") {
-			AddMovePosition(0, 1);
+	void IntrepretMovement(const std::string& text) {
+		if (text == "fd") { //Move forward
+			switch (direction) {
+			case 0: //Right
+				AddMovePosition(1, 0);
+				break;
+			case 1: //Down
+				AddMovePosition(0, 1);
+				break;
+			case 2: //Left
+				AddMovePosition(-1, 0);
+				break;
+			case 3: //Up
+				AddMovePosition(0, -1);
+				break;
+			}
+		} else if (text == "bk") { //Move backward
+			switch (direction) {
+			case 0: //Right
+				AddMovePosition(-1, 0);
+				break;
+			case 1: //Down
+				AddMovePosition(0, -1);
+				break;
+			case 2: //Left
+				AddMovePosition(1, 0);
+				break;
+			case 3: //Up
+				AddMovePosition(0, 1);
+				break;
+			}
 		}
 	}
 
-	std::size_t IntrepretLoop(const std::vector<std::string>& strings, int nStartPoint, int nLoop) {
+	void IntrepretRotation(const std::string& text) {
+		if (text == "rt") { 
+			direction++; 
+			if (direction > 3) direction = 0;
+		}
+		else if (text == "lt") { 
+			direction--; 
+			if (direction < 0) direction = 3;
+		}
+	}
 
+	std::size_t IntrepretLoop(const Level& level, bool& isRun, const std::vector<std::string>& strings, int nStartPoint, int nLoop) {
 		std::vector<std::string> stringsToLoop;
 		bool isLoopPoint = false;
+		int conditionalPoint = 0;
 
 		for (int i = nStartPoint; i < (int)strings.size(); i++) {
 
@@ -342,6 +416,9 @@ private:
 				isLoopPoint = true;
 				break;
 			}
+
+			if (textForLoop[0] == "if") conditionalPoint = i;
+
 			else if (textForLoop[0] == "openloop" || textForLoop[0] == "repeat") {
 				continue;
 			}
@@ -352,18 +429,81 @@ private:
 		if (!isLoopPoint) return 0;
 
 		for (int n = 0; n < nLoop; n++) {
+			int value = 0;
+
 			for (int i = 0; i < (int)stringsToLoop.size(); i++) {
 
-				auto text = ToWords(stringsToLoop[i]);
+				int stringIndex = i + value;
+				if (stringIndex > (int)(stringsToLoop.size() - 1)) break;
+
+				auto text = ToWords(stringsToLoop[stringIndex]);
 				if (text.size() == 0) continue;
 
 				if (text[0] == "move") {
-					IntrepretMovement(text);
+					IntrepretMovement(text[1]);
+				}
+				else if (text[0] == "if") {
+					int nLines = (int)IntrepretCheckConditional(level, strings, conditionalPoint);
+					value += nLines;
+				}
+				else if (text[0] == "rotate") {
+					IntrepretRotation(text[1]);
+					rotations.push_back(direction);
 				}
 			}
 		}
 
 		return stringsToLoop.size();
+	}
+
+	std::size_t IntrepretCheckConditional(const Level& level, const std::vector<std::string>& strings, int nStartPoint) {
+		std::vector<std::string> first, second;
+
+		bool isConditionSatisfied = true;
+		bool isFirstComplete = false;
+
+		for (int i = nStartPoint; i < (int)strings.size(); i++) {
+			auto text = ToWords(strings[i]);
+			if (text.size() == 0) continue;
+
+			if (text.size() >= 3) {
+				if (text[0] == "if" && text[1] == "fd" && text[2] == "empty") {
+					int x = (int)(playerPos.x / pixelSize), y = (int)(playerPos.y / pixelSize);
+					for (const sf::Vector2i& pos : movePositions) {
+						x += pos.x;
+						y += pos.y;
+					}
+
+					if (direction == 0) { isConditionSatisfied = (bool)(level.GetCharacter((uint32_t)x + 1, (uint32_t)y) == '#'); }
+					else if (direction == 1) { isConditionSatisfied = (bool)(level.GetCharacter((uint32_t)x, (uint32_t)y + 1) == '#'); }
+					else if (direction == 2) { isConditionSatisfied = (bool)(level.GetCharacter((uint32_t)x - 1, (uint32_t)y) == '#'); }
+					else if (direction == 3) { isConditionSatisfied = (bool)(level.GetCharacter((uint32_t)x, (uint32_t)y - 1) == '#'); }
+				
+					continue;
+				}
+			}
+
+			if (text[0] == "else" || strings[i] == "else") {
+				isFirstComplete = true;
+				continue;
+			}
+
+			if (text[0] == "closeif" || text[0] == "endif") break;
+			
+			if (!isFirstComplete) first.push_back(strings[i]);
+			else second.push_back(strings[i]);
+		}
+
+		std::size_t size = isConditionSatisfied ? first.size() : second.size();
+		for (int i = 0; i < size; i++) {
+			auto text = ToWords(isConditionSatisfied ? first[i] : second[i]);
+			if (text.size() == 0) continue;
+
+			if (text[0] == "move") IntrepretMovement(text[1]);
+			else if (text[0] == "rotate") IntrepretRotation(text[1]);
+		}
+
+		return first.size() + second.size() + 3;
 	}
 public:
 	Player() {
@@ -372,7 +512,11 @@ public:
 		isIndex = false;
 		isWin = false;
 
-		color = sf::Color(rand() % 256, rand() % 256, rand() % 256);
+		sprite.setTextureRect(sf::IntRect(direction * (int)pixelSize, 0, (int)pixelSize, (int)pixelSize));
+	}
+
+	void LoadSprite(const sf::Texture& texture) {
+		sprite.setTexture(texture);
 	}
 
 	void Move(const Level& level) {
@@ -384,7 +528,10 @@ public:
 			//New Position of player in level
 			sf::Vector2i playerToLevelIndex = { x + movePositions[index].x, y + movePositions[index].y };
 
-			if (level.GetLevel()[playerToLevelIndex.y][playerToLevelIndex.x] == '#') {
+			sprite.setTextureRect(sf::IntRect(rotations[index] * (int)pixelSize, 0, (int)pixelSize, (int)pixelSize));
+
+			if (level.GetCharacter(playerToLevelIndex.x, playerToLevelIndex.y) == '#') {
+				nMoves++;
 				playerPos += sf::Vector2f(movePositions[index].x * pixelSize, movePositions[index].y * pixelSize);
 			}
 			
@@ -392,21 +539,43 @@ public:
 		}
 	}
 
-	void Run(const std::vector<std::string>& strings) {
-		ClearMovePositions();
+	void Run(const Level& level, bool& isRun, const std::vector<std::string>& strings) {
+		movePositions.clear();
+		rotations.clear();
 
 		int value = 0;
 		for (int i = 0; i < (int)strings.size(); i++) {
 
-			//StringIndex ensures that looping strings are not re-read
+			//StringIndex ensures that looping & conditional strings are not re-read
 			int stringIndex = i + value;
 			if (stringIndex > (int)(strings.size() - 1)) break;
+
+			int x = 0, y = 0;
+			for (const sf::Vector2i& pos : movePositions) {
+				x += pos.x;
+				y += pos.y;
+			}
+
+			if (level.GetCharacter((uint32_t)x, (uint32_t)y) == 'W') {
+				isRun = true;
+				break;
+			}
 
 			auto text = ToWords(strings[stringIndex]);
 			if (text.size() == 0) continue;
 
-			if (text[0] == "Move" || text[0] == "move") {
-				IntrepretMovement(text);
+			if (text[0] == "move") {
+				IntrepretMovement(text[1]);
+			}
+
+			if (text[0] == "rotate") {
+				IntrepretRotation(text[1]);
+				rotations.push_back(direction);
+			}
+
+			if (text[0] == "if") {
+				int nLines = (int)IntrepretCheckConditional(level, strings, stringIndex) - 1;
+				value += nLines;
 			}
 
 			if (text[0] == "openloop" || text[0] == "repeat") {
@@ -414,7 +583,7 @@ public:
 				int n = std::stoi(text[1]);
 
 				//nLines -> number of lines in loop
-				int nLines = (int)IntrepretLoop(strings, stringIndex, n);
+				int nLines = (int)IntrepretLoop(level, isRun, strings, stringIndex, n);
 				value += nLines;
 			}
 		}
@@ -432,11 +601,15 @@ public:
 		isWin = false;
 
 		switch (itemMap.GetLevel()[y][x]) {
-		case '1':
+		case 'A':
 			itemMap.SetCharacter((unsigned)x, (unsigned)y, '#');
 			break;
 		case 'W':
 			if ((!isWinTileActive && tile.GetIsTileActive()) || (isWinTileActive)) isWin = true;
+			break;
+		case 'S':
+			movePositions.clear();
+			Reset();
 			break;
 		}
 
@@ -444,31 +617,39 @@ public:
 			isRun = false;
 			isIndex = true;
 		}
+	
+		sprite.setPosition(playerPos);
 	}
 
 	void AddMovePosition(int dirX, int dirY) {
+		rotations.push_back(direction);
 		movePositions.emplace_back(dirX, dirY);
 	}
 
-	void ClearMovePositions() {
-		movePositions.clear();
-	}
-
-	void ResetNMoves() { nMoves = 0; }
-	void ResetIndex() { index = 0; }
-	void ResetWin() { isWin = false; }
 	void SetPosition(const sf::Vector2f& pos) {
 		playerPos = pos;
 		resetPlayerPos = pos;
 	}
 
-	inline sf::Color GetColor() const { return color; }
+	void ResetWin() { isWin = false; }
+	void Reset() {
+		nMoves = 0;
+		isIndex = false;
+		index = 0;
+		ResetWin();
+		SetPosition(resetPlayerPos);
+		direction = 0;
+		sprite.setTextureRect(sf::IntRect(direction * (int)pixelSize, 0, (int)pixelSize, (int)pixelSize));
+	}
+
+	void Render(sf::RenderWindow& window) {
+		window.draw(sprite);
+	}
+
 	inline int GetNMoves() const { return nMoves; }
-	inline int GetIndex() const { return index; }
 	inline bool GetIsWin() const { return isWin; }
-	bool& GetIsIndex() { return isIndex; }
+	inline bool GetIsIndex() const { return isIndex; }
 	inline sf::Vector2f GetPosition() const { return playerPos; }
-	inline sf::Vector2f GetResetPosition() const { return resetPlayerPos; }
 	
 	std::vector<sf::Vector2i> GetMovePositions() const { return movePositions; }
 	sf::Vector2f GetCurrentMovePosition() { 
@@ -476,7 +657,7 @@ public:
 		if (posIndex > (int)(movePositions.size() - 1)) {
 			posIndex = (int)(movePositions.size() - 1);
 		}
-		return (sf::Vector2f)movePositions[posIndex]; 
+		return (sf::Vector2f)movePositions[posIndex];
 	}
 };
 
@@ -561,7 +742,7 @@ private:
 	gui::SpriteButton runButton, clearButton;
 	sf::Text text;
 
-	bool isRun;
+	bool isRun, isButtonPressable;
 
 	sf::Clock clock;
 	int t, delay;
@@ -606,13 +787,16 @@ public:
 		Initialize();
 
 		spriteTile.setTexture(AssetHolder::Get().GetTexture("Tileset"));
-		itemTile.setTexture(AssetHolder::Get().GetTexture("coin"));
+		player.LoadSprite(AssetHolder::Get().GetTexture("player"));
 
 		pixel.setSize({ pixelSize, pixelSize });
 
 		delay = 100; //Milliseconds
 
-		isRun = false;
+		isRun = true;
+		player.Run(levelManager.GetLevel(), isRun, textWindow.GetStrings());
+
+		isButtonPressable = true;
 
 		runButton = gui::SpriteButton(0, 0, 64, { 0.0f, size.y - 70.0f });
 		clearButton = gui::SpriteButton(0, 1, 64, { 70.0f, size.y - 70.0f });
@@ -634,11 +818,11 @@ public:
 
 		textWindow.Logic();
 
-		if (runButton.GetIsPressed()) {
+		if (runButton.GetIsPressed() && isButtonPressable) {
 			isRun = true;
-			player.ResetIndex();
-			
-			player.Run(textWindow.GetStrings());
+			isButtonPressable = false;
+
+			player.Run(levelManager.GetLevel(), isRun, textWindow.GetStrings());
 		}
 
 		if (clearButton.GetIsPressed()) textWindow.ResetStrings();
@@ -676,11 +860,10 @@ public:
 		}
 
 		if (t > 2 * delay && player.GetIsIndex()) {
-			player.GetIsIndex() = false;
-			player.ResetNMoves();
 			for (auto& box : boxes) box.Reset();
 			tile.Reset();
-			player.SetPosition(player.GetResetPosition());
+			player.Reset();
+			isButtonPressable = true;
 			t = 0;
 		}
 	}
@@ -741,11 +924,18 @@ public:
 					continue;
 					break;
 				case 'A':
+					itemTile.setTexture(AssetHolder::Get().GetTexture("coin"));
+					itemTile.setPosition(j * pixelSize, i * pixelSize);
+					window.draw(itemTile);
+					break;
+				case 'S':
+					itemTile.setTexture(AssetHolder::Get().GetTexture("spike"));
 					itemTile.setPosition(j * pixelSize, i * pixelSize);
 					window.draw(itemTile);
 					break;
 				case 'W':
-					pixel.setFillColor(levelManager.GetIsWinTileActive() ? sf::Color::Green : sf::Color::Red);
+					bool isColor = ((!levelManager.GetIsWinTileActive() && tile.GetIsTileActive() || levelManager.GetIsWinTileActive()));
+					pixel.setFillColor(isColor ? sf::Color::Green : sf::Color::Red);
 					pixel.setPosition(j * pixelSize, i * pixelSize);
 					window.draw(pixel);
 					break;
@@ -754,9 +944,7 @@ public:
 		}
 		
 		//Player
-		pixel.setPosition(player.GetPosition());
-		pixel.setFillColor(player.GetColor());
-		window.draw(pixel);
+		player.Render(window);
 
 		//Toggle tile
 		pixel.setPosition(tile.GetPosition());
@@ -802,6 +990,8 @@ private:
 		AssetHolder::Get().AddTexture("Tileset", "files/images/Tileset.png");
 		AssetHolder::Get().AddTexture("coin", "files/images/coin.png");
 		AssetHolder::Get().AddTexture("buttons", "files/images/buttons.png");
+		AssetHolder::Get().AddTexture("spike", "files/images/spike.png");
+		AssetHolder::Get().AddTexture("player", "files/images/player.png");
 	}
 
 public:
