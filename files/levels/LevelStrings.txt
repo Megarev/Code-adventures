@@ -1,4 +1,0 @@
-level0 level0ItemMap 1
-level1 level1ItemMap 1
-level2 level2ItemMap 0
-level3 level3ItemMap 0
