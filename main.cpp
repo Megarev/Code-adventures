@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include "GraphicsRender.h"
 #include "AssetManager.h"
 #include "GraphicsUI.h"
@@ -191,7 +192,7 @@ public:
 					if (i == textIndex) {
 						std::string activeString = textString.str();
 
-						while (activeString.size() > (uint32_t)(i == 0 ? 10 : 11)) {
+						while (activeString.size() > (uint32_t)(i == 0 ? 9 : 10)) {
 							activeString.pop_back();
 						}
 
@@ -225,7 +226,7 @@ public:
 						}
 
 						if (loopText[0] == "rotate") {
-							colors[j] = sf::Color::Yellow;
+							colors[j] = sf::Color(200, 100, 0);
 						}
 
 						if (loopText[0] == "if") colors[j] = sf::Color(100, 255, 255);
@@ -338,6 +339,8 @@ public:
 		Quit = 3
 	} state;
 	
+	sf::Music music; //Background music
+
 	GameState(const sf::Vector2u& size)
 		: windowSize(size) {
 
@@ -354,6 +357,10 @@ public:
 	virtual void ManageEvent(sf::Event, sf::Vector2f) {}
 	virtual void Logic(float) = 0;
 	virtual void Render(sf::RenderWindow&) = 0;
+	void MusicClear() {
+		music.stop();
+		sf::sleep(sf::seconds(2.0f));
+	}
 
 	static bool KeyPress(sf::Keyboard::Key key) {
 		return sf::Keyboard::isKeyPressed(key);
@@ -371,7 +378,7 @@ private:
 	sf::RectangleShape tilePixel, selectedTile;
 	std::list<Tile> levelTiles;
 	const std::string& tileCharacters = "1239W8#4BW765BT"; //Tile Characters
-	int index;
+	int index, tileSetWidth, tileSetOffset;
 
 	bool isTileSetDrawn, isKeyPressed;
 	int nLineWidth, nLineHeight; //Max lines along with and height
@@ -442,6 +449,7 @@ public:
 	EditorState(const sf::Vector2u& size)
 		: GameState(size) {
 		tileSet.setTexture(AssetHolder::Get().GetTexture("Tileset"));
+		tileSet.setTextureRect(sf::IntRect(0, 0, 5 * (int)pixelSize, 3 * (int)pixelSize));
 		tileSet.setPosition((float)size.x - 5.0f * pixelSize, 0.0f);
 		tile.setTexture(AssetHolder::Get().GetTexture("Tileset"));
 		tile.setTextureRect(sf::IntRect((int)pixelSize, (int)pixelSize, (int)pixelSize, (int)pixelSize));
@@ -452,11 +460,18 @@ public:
 		selectedTile.setSize({ pixelSize, pixelSize });
 		selectedTile.setFillColor(sf::Color(200, 200, 100, 100));
 	
+		music.openFromFile("files/sounds/menuBg.wav");
+		music.setLoop(true);
+		music.play();
+
 		isTileSetDrawn = true;
 		isKeyPressed = false;
 
 		nLineWidth = 15;
 		nLineHeight = 11;
+
+		tileSetWidth = 5;
+		tileSetOffset = 11;
 
 		playerPos = { -pixelSize, -pixelSize };
 		index = 0;
@@ -500,7 +515,7 @@ public:
 					
 					if (tileSet.getGlobalBounds().contains(x * pixelSize, y * pixelSize)) {
 						selectedTile.setPosition(x * pixelSize, y * pixelSize);
-						index = y * 5 + x - 11;
+						index = y * tileSetWidth + x - tileSetOffset;
 					}
 				}
 				break;
@@ -536,7 +551,7 @@ public:
 		if (MouseButton(sf::Mouse::Right)) {
 			auto [x, y] = (sf::Vector2i)(mousePosition / pixelSize);
 
-			if (x > 1 && y > 1 && x < nLineWidth && y < nLineHeight) {
+			if (x > 0 && y > 0 && x < nLineHeight && y < nLineWidth) {
 				for (auto it = levelTiles.begin(); it != levelTiles.end();) {
 					if (it->x == x && it->y == y) {
 						it = levelTiles.erase(it);
@@ -640,6 +655,10 @@ public:
 
 		quitButton = gui::SpriteButton(0, 1, 200, 64, { 150.0f, 352.0f });
 		quitButton.LoadSprite(AssetHolder::Get().GetTexture("menuButtons"));
+
+		music.openFromFile("files/sounds/menuBg.wav");
+		music.setLoop(true);
+		music.play();
 	}
 
 	void ManageEvent(sf::Event e, sf::Vector2f mousePos) override {
@@ -652,6 +671,7 @@ public:
 	void Logic(float dt) override {
 		if (playButton.GetIsPressed()) {
 			SetState(State::Play);
+			music.stop();
 		}
 		else if (quitButton.GetIsPressed()) {
 			SetState(State::Quit);
@@ -1075,9 +1095,6 @@ private:
 public:
 	TextManager() {
 		LoadTexts("files/text.txt");
-		//texts = {
-		//	"You can move the player by \n using 'move fd' instruction"
-		//};
 		index = 0;
 	}
 
@@ -1158,7 +1175,9 @@ public:
 	}
 
 	Level& GetLevel() { return level; }
-	ItemMap& GetItemMap() { return itemMap; }
+	ItemMap& GetItemMap() { 
+		return itemMap; 
+	}
 	inline int GetIndex() const { return index; }
 
 	void ResetIndex() { index = 0; }
@@ -1168,12 +1187,64 @@ public:
 	}
 };
 
+//Transition between levels
+class Transition {
+private:
+	sf::RectangleShape screen;
+	
+	int alpha;
+
+	bool isTransition;
+	int colorState;
+public:
+	bool isLoadNextLevel;
+	Transition() {}
+	Transition(const sf::Vector2f& size) {
+
+		alpha = 1;
+		isTransition = false;
+
+		colorState = 1;
+		isLoadNextLevel = true;
+
+		screen.setSize(size);
+		screen.setFillColor(sf::Color(0, 0, 0, alpha));
+	}
+
+	void Logic() {
+		if (alpha > 250) {
+			colorState = -1;
+			isLoadNextLevel = false;
+		}
+
+		alpha += 5 * colorState;
+		
+		if (alpha <= 0) {
+			isTransition = false;
+			colorState = 1;
+			alpha = 1;
+		}
+	}
+
+	void Render(sf::RenderWindow& window) {
+		screen.setFillColor(sf::Color(0, 0, 0, alpha));
+		window.draw(screen);
+	}
+
+	inline bool GetTransition() const { return isTransition; }
+	void SetTransition(bool state) { isTransition = state; }
+	
+	inline int GetColorState() const { return colorState; }
+};
+
 class PlayState : public GameState {
 private:
 	LevelManager levelManager; //Level Manager
 	TextManager textManager; //Text Manager
 
-	sf::Sprite spriteTile, itemTile, background;
+	Transition transitionScreen; //Transition between levels
+
+	sf::Sprite spriteTile, background;
 
 	Player player;
 
@@ -1192,6 +1263,7 @@ private:
 	void Initialize() {
 
 		boxes.clear();
+		player.Reset();
 		tile.SetPosition({ -pixelSize, -pixelSize });
 
 		ItemMap& map = levelManager.GetItemMap();
@@ -1228,6 +1300,8 @@ public:
 		spriteTile.setTexture(AssetHolder::Get().GetTexture("Tileset"));
 		player.LoadSprite(AssetHolder::Get().GetTexture("player"));
 
+		transitionScreen = Transition((sf::Vector2f)size);
+
 		if (isEditorRunState) {
 			background.setTexture(AssetHolder::Get().GetTexture("background"));
 			levelManager.LoadLevelFromFile("files/levels/EditorLevel.lvl");
@@ -1254,11 +1328,16 @@ public:
 
 		text.setFont(AssetHolder::Get().GetFont("lucidaConsole"));
 		text.setCharacterSize(25);
+
+		music.openFromFile("files/sounds/gameBg.wav");
+		music.setLoop(true);
+		music.play();
 	}
 
 	void Input() override {
 		if (KeyPress(sf::Keyboard::Escape)) {
 			SetState(isEditorRunState ? State::Editor : State::Menu);
+			music.stop();
 		}
 	}
 
@@ -1287,6 +1366,26 @@ public:
 	}
 
 	void Logic(float dt) override {
+
+		if (transitionScreen.GetTransition()) {
+
+			transitionScreen.Logic();
+
+			if (!transitionScreen.isLoadNextLevel) {
+				if (isEditorRunState) {
+					SetState(State::Editor);
+					isEditorRunState = false;
+				}
+				else {
+					levelManager.LoadNextLevel();
+					textManager.LoadNextText();
+					textWindow.ResetStrings();
+					Initialize();
+				}
+			
+				transitionScreen.isLoadNextLevel = true;
+			}
+		}
 
 		textWindow.Logic();
 
@@ -1325,24 +1424,13 @@ public:
 		player.Logic(levelManager.GetItemMap(), isRun, !isToggleTileInLevel, tile);
 
 		if (player.GetIsWin() && t > 2 * delay) {
-
-			if (isEditorRunState) {
-				SetState(State::Editor);
-				isEditorRunState = false;
-			}
-			else {
-				levelManager.LoadNextLevel();
-				textManager.LoadNextText();
-				textWindow.ResetStrings();
-				Initialize();
-				player.ResetWin();
-			}
+			transitionScreen.SetTransition(true);
 		}
 
 		if (t > 2 * delay && player.GetIsIndex()) {
 			for (auto& box : boxes) box.Reset();
 			tile.Reset();
-			player.Reset();
+			if (!player.GetIsWin()) player.Reset();
 			isButtonPressable = true;
 			t = 0;
 		}
@@ -1361,7 +1449,7 @@ public:
 
 		for (int i = 1; i < (int)levelManager.GetLevel().GetHeight() - 1; i++) {
 			for (int j = 1; j < (int)levelManager.GetLevel().GetWidth() - 1; j++) {
-				switch (levelManager.GetLevel().GetLevel()[i][j]) {
+				switch (levelManager.GetLevel().GetCharacter(j, i)) {
 				case '#':
 					SetRect(1, 1);
 					break;
@@ -1404,38 +1492,34 @@ public:
 
 		for (int i = 1; i < (int)levelManager.GetItemMap().GetHeight() - 1; i++) {
 			for (int j = 1; j < (int)levelManager.GetItemMap().GetWidth() - 1; j++) {
-				switch (levelManager.GetItemMap().GetLevel()[i][j]) {
+				switch (levelManager.GetItemMap().GetCharacter(j, i)) {
 				case '#':
 				case '.':
 					continue;
 					break;
 				case 'A':
-					itemTile.setTexture(AssetHolder::Get().GetTexture("coin"));
+					SetRect(5, 0);
 					break;
 				case 'S':
-					itemTile.setTexture(AssetHolder::Get().GetTexture("spike"));
+					SetRect(5, 1);
+					break;
+				case 'T':
+					SetRect(4, 2);
 					break;
 				case 'W':
-					//bool isWinTileActive = ((!levelManager.GetIsWinTileActive() && tile.GetIsTileActive() || levelManager.GetIsWinTileActive()));
 					bool isWinTileActive = !isToggleTileInLevel;
-					itemTile.setTexture(AssetHolder::Get().GetTexture("Tileset"));
-					itemTile.setTextureRect(sf::IntRect(4 * (int)pixelSize, isWinTileActive ? 0 : (int)pixelSize, (int)pixelSize, (int)pixelSize));
+					if (tile.GetIsTileActive()) isWinTileActive = true;
+					SetRect(4, isWinTileActive ? 0 : 1);
 					break;
 				}
-			
-				itemTile.setPosition(j * pixelSize, i * pixelSize);
-				window.draw(itemTile);
+
+				spriteTile.setPosition(j * pixelSize, i * pixelSize);
+				window.draw(spriteTile);
 			}
 		}
 
 		//Player
 		player.Render(window);
-
-		//Toggle tile
-		itemTile.setTexture(AssetHolder::Get().GetTexture("Tileset"));
-		itemTile.setTextureRect(sf::IntRect(4 * (int)pixelSize, 2 * (int)pixelSize, (int)pixelSize, (int)pixelSize));
-		itemTile.setPosition(tile.GetPosition());
-		window.draw(itemTile);
 
 		//Boxes
 		for (auto& box : boxes) {
@@ -1461,6 +1545,10 @@ public:
 		}
 
 		DrawTextWithValue(window, AssetHolder::Get().GetFont("lucidaConsole"), 160.0f, (windowSize.y - 32.0f), "Moves :", player.GetNMoves(), sf::Color::White, 25);
+	
+		if (transitionScreen.GetTransition()) {
+			transitionScreen.Render(window);
+		}
 	}
 };
 
@@ -1478,10 +1566,8 @@ private:
 	void LoadAssets() {
 		AssetHolder::Get().AddFont("lucidaConsole", "files/fonts/Lucida_Console.ttf");
 		AssetHolder::Get().AddTexture("Tileset", "files/images/Tileset.png");
-		AssetHolder::Get().AddTexture("coin", "files/images/coin.png");
 		AssetHolder::Get().AddTexture("buttons", "files/images/buttons.png");
 		AssetHolder::Get().AddTexture("menuButtons", "files/images/menuButtons.png");
-		AssetHolder::Get().AddTexture("spike", "files/images/spike.png");
 		AssetHolder::Get().AddTexture("player", "files/images/player.png");
 		AssetHolder::Get().AddTexture("howToPlay", "files/images/howToPlay.png");
 		AssetHolder::Get().AddTexture("background", "files/images/gameBack.png");
@@ -1549,6 +1635,7 @@ public:
 				switch (e.type) {
 				case sf::Event::Closed:
 					Window.close();
+					gameState->MusicClear();
 					break;
 				case sf::Event::KeyPressed:
 					switch (e.key.code) {
