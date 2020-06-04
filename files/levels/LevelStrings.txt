@@ -1,7 +1,20 @@
-level0 level0ItemMap 1
-level1 level1ItemMap 1
-level2 level2ItemMap 0
-level3 level3ItemMap 0
-level4 level4ItemMap 1
-level5 level5ItemMap 1
-level6 level6ItemMap 0
+level0   level0ItemMap
+level1   level1ItemMap
+level1-1 level1-1ItemMap
+level1-2 level1-2ItemMap
+level2   level2ItemMap
+level2-1 level2-1ItemMap
+level2-2 level2-2ItemMap
+level3   level3ItemMap
+level4   level4ItemMap
+level4-1 level4-1ItemMap
+level5   level5ItemMap
+level5-1 level5-1ItemMap
+level5-2 level5-2ItemMap
+level6   level6ItemMap
+level6-1 level6-1ItemMap
+level6-2 level6-2ItemMap
+level7   level7ItemMap
+level8   level8ItemMap
+level8-1 level8-1ItemMap
+level9   level9ItemMap

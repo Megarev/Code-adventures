@@ -1,0 +1,50 @@
+You can move the player by 
+using `move fd` command
+>
+Rotate player by 'turn rt'
+or 'turn lt'
+>
+Try some rotations
+>
+Where is Kyube looking at?
+>
+Give the box a push
+Push the box onto yellow tile
+>
+Level seems difficult?
+>
+Loop command (write 'repeat')
+Fill statements with action!
+>
+Thats a big level!
+>
+Avoid sharp spikes
+>
+This level seems unfair
+>
+If command (write 'if')
+(best with loops)
+>
+A combination of 'loop' and 'if'
+is how you solve it correctly
+>
+Even boxes can act was wall
+if box is against a wall
+>
+Is magenta cube friendly?
+>
+Kyube & Green:
+Why magenta cube is so rude?
+>
+"Probably Magenta cube guards
+this castle from trespassers"
+>
+Kyube: So many boxes! (Sigh)
+>
+Boxes can also act as bridges
+>
+Green: Will we find red cube?
+Kyube: I think red cube is nearby
+>
+Get Victory against red cube!
+>
